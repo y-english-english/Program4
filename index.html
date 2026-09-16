@@ -359,14 +359,14 @@
   }
   .faller{
     position:absolute; transform:translateX(-50%); text-align:center;
-    transition: top 0.15s linear; width:150px;
+    transition: top 0.15s linear; width:180px;
   }
   .faller-emoji{ font-size:40px; filter:drop-shadow(0 2px 3px rgba(0,0,0,0.4)); }
   .faller-word{
-    font-size:16px; font-weight:700; color:#fff; background:rgba(0,0,0,0.4);
-    border-radius:8px; padding:3px 7px; margin-top:4px; display:inline-block;
-    max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-    line-height:1.3;
+    font-size:15px; font-weight:700; color:#fff; background:rgba(0,0,0,0.45);
+    border-radius:8px; padding:4px 8px; margin-top:4px; display:inline-block;
+    max-width:180px; white-space:normal; word-break:keep-all; overflow-wrap:break-word;
+    line-height:1.35;
   }
   .invader-hud{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
   #invaderInput.wrong-flash{ animation: invaderWrong 0.4s ease; border-color:var(--red) !important; }
@@ -634,7 +634,7 @@ function spawnFaller(){
   if(!g) return;
   const word = WORDS[Math.floor(Math.random()*WORDS.length)];
   const uid = g.nextId++;
-  const left = 18 + Math.random()*64; // %、大きくなったアイコンが端で切れないように
+  const left = 26 + Math.random()*48; // %、幅広の吹き出しが画面端で切れないように
   const f = { uid, word, top:-8, left, speedMul: 0.85 + Math.random()*0.4, el:null };
   g.fallers.push(f);
   g.totalAppeared += 1;
@@ -666,7 +666,7 @@ function invaderTick(){
   }
 
   // 落下スピードも時間経過で少しずつ上がる
-  const baseSpeed = 1.0 + Math.min(1.8, g.elapsed*0.015);
+  const baseSpeed = 0.62 + Math.min(1.3, g.elapsed*0.009);
   const landed = [];
   g.fallers.forEach(f=>{
     f.top += baseSpeed * f.speedMul;
@@ -778,8 +778,12 @@ function startReview(){
   openQuiz('review', questions, {timed:true, lives:3});
 }
 
+let quizSessionSeq = 0;
+
 function openQuiz(mode, questions, opts){
+  quizSessionSeq += 1;
   app.quiz = {
+    sessionId: quizSessionSeq,
     mode, questions, index:0,
     timed: opts.timed, lives: opts.lives,
     score:0, correctCount:0, combo:0, maxCombo:0,
@@ -810,11 +814,18 @@ function recordDelta(wordId, correct){
 function startTimer(){
   clearTimer();
   const q = app.quiz;
+  const sessionId = q.sessionId;
   const ring = document.getElementById('timerFg');
   const label = document.getElementById('timerNum');
   const totalTime = currentQuestion().timeLimit;
   const circumference = 2*Math.PI*24;
-  q.timerId = setInterval(()=>{
+  const intervalRef = setInterval(()=>{
+    // このタイマーの持ち主のセッションがもう終わっている／別のセッションに切り替わっていたら即停止する
+    // （中断・再開などでタイマーの停止処理が漏れても、別の問題を誤って「無回答」にしないための保険）
+    if(!app.quiz || app.quiz.sessionId !== sessionId){
+      clearInterval(intervalRef);
+      return;
+    }
     q.timeLeft -= 1;
     if(label) label.textContent = q.timeLeft;
     if(ring){
@@ -823,14 +834,17 @@ function startTimer(){
       ring.style.stroke = q.timeLeft<=5 ? 'var(--red)' : 'var(--leaf)';
     }
     if(q.timeLeft<=0){
-      clearTimer();
+      clearInterval(intervalRef);
+      q.timerId = null;
       if(!q.answered) submitAnswer(null, true);
     }
   }, 1000);
+  q.timerId = intervalRef;
 }
 function clearTimer(){
   if(app.quiz && app.quiz.timerId){ clearInterval(app.quiz.timerId); app.quiz.timerId=null; }
 }
+
 
 function submitAnswer(rawValue, timedOut){
   const q = app.quiz;
@@ -1253,10 +1267,10 @@ function renderQuestionBody(question, q){
     const tilesHtml = question.letters.map((ch,i)=>{
       const isUsed = used.includes(i);
       const disabled = (isUsed || q.answered) ? 'disabled' : '';
-      return `<button class="tile-btn ${isUsed?'used':''}" ${disabled} data-tile="${i}">${esc(ch.toUpperCase())}</button>`;
+      return `<button class="tile-btn ${isUsed?'used':''}" ${disabled} data-tile="${i}">${esc(ch.toLowerCase())}</button>`;
     }).join('');
     return `${promptHtml}
-      <input type="text" class="${inputCls} eng" readonly value="${esc((q.userInput||'').toUpperCase())}" placeholder="タイルをタップして単語を作ろう">
+      <input type="text" class="${inputCls} eng" readonly value="${esc(q.userInput||'')}" placeholder="タイルをタップして単語を作ろう">
       <div class="tile-grid">${tilesHtml}</div>
       ${!q.answered && used.length ? '<button class="btn secondary small" data-action="undoTile">1文字戻す</button>' : ''}`;
   } else {
